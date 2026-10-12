@@ -60,6 +60,8 @@ try {
         'error' => 'เชื่อมต่อฐานข้อมูลไม่สำเร็จ: ' . $e->getMessage() .
                     ' — ตรวจสอบว่าเปิด Apache และ MySQL ใน XAMPP Control Panel แล้ว ' .
                     'และนำเข้าไฟล์ sql/sakon_stay_xampp.sql เข้า phpMyAdmin แล้วหรือยัง',
+        // ช่วยดีบัก: แสดงปลายทางที่พยายามต่อ (ไม่แสดงรหัสผ่าน) ถ้าเป็น 127.0.0.1 บน Railway แปลว่าอ่านตัวแปร MYSQL* ไม่ได้
+        'connect_to' => "host=$DB_HOST port=$DB_PORT db=$DB_NAME user=$DB_USER",
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }
