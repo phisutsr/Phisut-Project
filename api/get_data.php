@@ -9,7 +9,7 @@ function jarr($text) {
 
 $out = [
     'site' => [
-        'name'      => 'ครา',
+        'name'      => 'ครามสเตย์ สกลนคร',
         'heroTitle' => 'ที่พักในเขตอำเภอเมืองสกลนคร จองจบในที่เดียว',
         'phone'     => '042-711-000',
         'email'     => 'contact@sakonstay.th',
