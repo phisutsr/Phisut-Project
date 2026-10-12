@@ -1,0 +1,184 @@
+{
+  "_readme": "ตัวอย่างรูปแบบข้อมูล JSON ที่หน้าเว็บ (JavaScript) ใช้รับส่งกับเซิร์ฟเวอร์ ของระบบจองห้องพักจังหวัดสกลนคร",
+
+  "POST /api/auth/login": {
+    "request": { "username": "user", "password": "1234", "role": "guest" },
+    "response": {
+      "ok": true,
+      "token": "eyJhbGciOiJIUzI1NiJ9....",
+      "user": { "userId": "U004", "role": "guest", "fullName": "กมล ใจดี", "phone": "082-555-1212" }
+    }
+  },
+
+  "POST /api/auth/forgot-password": {
+    "request": { "email": "user@mail.th" },
+    "response": { "ok": true, "message": "ส่งรหัสยืนยัน 6 หลักไปที่อีเมลแล้ว", "expiresIn": 900 }
+  },
+
+  "GET /api/properties?type=โรงแรม&maxPrice=1500": {
+    "response": {
+      "ok": true,
+      "total": 2,
+      "items": [
+        {
+          "propertyId": "P001",
+          "name": "หนองหาร เลควิว โฮเทล",
+          "propType": "โรงแรม",
+          "district": "เมืองสกลนคร",
+          "address": "188 ถ.สุขเกษม ต.ธาตุเชิงชุม อ.เมืองสกลนคร 47000",
+          "phone": "081-234-5678",
+          "startPrice": 690,
+          "rating": 5.0,
+          "reviewCount": 1,
+          "photos": ["/uploads/p001-1.jpg", "/uploads/p001-2.jpg"],
+          "amenities": ["แอร์", "Wi-Fi ฟรี", "ที่จอดรถ", "อาหารเช้า"],
+          "reviewStatus": "approved"
+        }
+      ]
+    }
+  },
+
+  "GET /api/properties/P001/rooms": {
+    "response": {
+      "ok": true,
+      "items": [
+        {
+          "roomId": "R002",
+          "roomType": "ห้องเตียงคู่ วิวหนองหาร",
+          "price": 1290,
+          "quantity": 5,
+          "freeRooms": 4,
+          "capacity": 3,
+          "bedDetail": "เตียงคู่ 2 เตียง",
+          "roomSize": 32,
+          "roomStatus": "available",
+          "amenities": ["แอร์", "Wi-Fi ฟรี", "ตู้เย็น", "อาหารเช้า"],
+          "photos": ["/uploads/r002-1.jpg"]
+        }
+      ]
+    }
+  },
+
+  "POST /api/properties": {
+    "_note": "เจ้าของที่พักเพิ่มที่พักใหม่ propType รับได้เฉพาะ โรงแรม | อพาร์ทเม้น | หอพัก | รีสอร์ท และ district ต้องเป็น เมืองสกลนคร เท่านั้น ระบบตั้งสถานะเป็น pending รอผู้ดูแลระบบตรวจสอบ",
+    "request": {
+      "name": "พระธาตุ แกรนด์ โฮเทล",
+      "propType": "โรงแรม",
+      "district": "เมืองสกลนคร",
+      "address": "7 ถ.เรืองสวัสดิ์ ต.ธาตุเชิงชุม อ.เมืองสกลนคร สกลนคร 47000",
+      "phone": "042-712-345",
+      "description": "โรงแรมกลางเมืองใกล้พระธาตุเชิงชุม มีห้องประชุม",
+      "amenities": ["แอร์", "Wi-Fi ฟรี", "ที่จอดรถ"],
+      "photos": ["data:image/jpeg;base64,...."]
+    },
+    "response": { "ok": true, "propertyId": "P005", "reviewStatus": "pending" }
+  },
+
+  "PATCH /api/rooms/R004/status": {
+    "request": { "roomStatus": "maintenance", "reason": "ปิดปรับปรุงห้องน้ำ 3 วัน" },
+    "response": { "ok": true, "roomId": "R004", "roomStatus": "maintenance" }
+  },
+
+  "POST /api/bookings": {
+    "request": {
+      "roomId": "R003",
+      "checkIn": "2026-09-22",
+      "checkOut": "2026-09-24",
+      "roomQty": 1,
+      "guestNote": "เข้าพักประมาณสองทุ่ม"
+    },
+    "response": {
+      "ok": true,
+      "booking": {
+        "bookingId": "B002",
+        "bookingCode": "SKN-240402",
+        "userId": "U004",
+        "propertyId": "P002",
+        "roomId": "R003",
+        "checkIn": "2026-09-22",
+        "checkOut": "2026-09-24",
+        "nights": 2,
+        "roomQty": 1,
+        "totalPrice": 3000,
+        "bookingStatus": "pending",
+        "payment": {
+          "paymentId": "PM002",
+          "method": "qr_code",
+          "amount": 3000,
+          "payStatus": "unpaid",
+          "qrPayload": "00020101021229370016A00000067701011101130066812345678530376454063000.005802TH6304ABCD"
+        }
+      }
+    }
+  },
+
+  "POST /api/payments/PM002/slip": {
+    "_note": "ผู้จองอัปโหลดหลักฐานการโอน ระบบเปลี่ยนสถานะเป็น waiting เพื่อให้เจ้าของที่พักตรวจสอบ",
+    "request": { "slip": "data:image/png;base64,....", "transferAt": "2026-09-16T10:12:00+07:00" },
+    "response": { "ok": true, "payStatus": "waiting" }
+  },
+
+  "PATCH /api/payments/PM002/verify": {
+    "request": { "payStatus": "paid", "verifyNote": "" },
+    "response": { "ok": true, "payStatus": "paid", "bookingStatus": "confirmed" }
+  },
+
+  "PATCH /api/bookings/B002/cancel": {
+    "request": { "reason": "เปลี่ยนแผนการเดินทาง" },
+    "response": { "ok": true, "bookingStatus": "cancelled", "cancelledAt": "2026-09-16T14:05:00+07:00" }
+  },
+
+  "GET /api/me/bookings?scope=history": {
+    "response": {
+      "ok": true,
+      "items": [
+        {
+          "bookingCode": "SKN-240118",
+          "propertyName": "หนองหาร เลควิว โฮเทล",
+          "roomType": "ห้องเตียงคู่ วิวหนองหาร",
+          "checkIn": "2026-09-02",
+          "checkOut": "2026-09-04",
+          "totalPrice": 2580,
+          "bookingStatus": "completed",
+          "payStatus": "paid",
+          "canReview": false
+        }
+      ]
+    }
+  },
+
+  "POST /api/reviews": {
+    "request": { "bookingId": "B001", "rating": 5, "comment": "ห้องสะอาด วิวหนองหารสวยมาก" },
+    "response": { "ok": true, "reviewId": "V001" }
+  },
+
+  "POST /api/admin/contents": {
+    "request": {
+      "contentType": "โปรโมชั่น",
+      "title": "จองล่วงหน้า 7 วัน ลด 10%",
+      "body": "สำหรับที่พักในเขตอำเภอเมืองสกลนคร",
+      "publishDate": "2026-09-16",
+      "isActive": true
+    },
+    "response": { "ok": true, "contentId": "N001" }
+  },
+
+  "PATCH /api/admin/properties/P004/review": {
+    "request": { "reviewStatus": "rejected", "reviewNote": "รูปภาพห้องพักไม่ครบตามที่แจ้ง" },
+    "response": { "ok": true, "reviewStatus": "rejected" }
+  },
+
+  "PUT /api/admin/site-settings": {
+    "request": {
+      "siteName": "ครามสเตย์ สกลนคร",
+      "heroTitle": "ที่พักทั่วสกลนคร จองจบในที่เดียว",
+      "contactPhone": "042-711-000"
+    },
+    "response": { "ok": true }
+  },
+
+  "_errorFormat": {
+    "ok": false,
+    "error": { "code": "ROOM_FULL", "message": "ห้องพักประเภทนี้ถูกจองเต็มในช่วงวันที่เลือก" }
+  }
+}
