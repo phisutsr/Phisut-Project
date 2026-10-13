@@ -1,20 +1,3 @@
--- =========================================================================
---  ระบบจองที่พักสกลนคร (ครามสเตย์ สกลนคร) — เวอร์ชันสำหรับเชื่อมกับเว็บผ่าน XAMPP
---  ฐานข้อมูลเดิม 8 ตาราง (User / Admin / Property_Owner / Accommodation /
---  Room / Booking / News / Review) + คอลัมน์เสริมที่จำเป็นสำหรับ api/*.php
---
---  คอลัมน์ที่เพิ่มจาก sql/sakon_stay.sql เดิม (ทำเครื่องหมาย "เสริม-xampp")
---   - `public_id`  ทุกตาราง : รหัสที่ฝั่งเว็บ (js/app.js) ใช้อ้างอิงแถวนั้น ๆ
---                  เพราะหน้าเว็บสร้างไอดีเองตอนเพิ่มข้อมูลใหม่ (เช่น "B-a1b2c3")
---                  ฝั่ง PHP จึงต้องมีคอลัมน์นี้ไว้จับคู่กับ primary key ตัวเลขภายใน
---   - `Accommodation.amenities`, `Accommodation.photos`  : เก็บเป็น JSON (TEXT)
---   - `Room.amenities`, `Room.photos`                    : เก็บเป็น JSON (TEXT)
---
---  Engine : MySQL 8 / MariaDB 10.4+ (ตามที่มากับ XAMPP)   Charset : utf8mb4
---  วิธีนำเข้า : เปิด phpMyAdmin ของ XAMPP > แท็บ Import > เลือกไฟล์นี้ > Go
---            หรือ   mysql -u root -p < sakon_stay_xampp.sql
--- =========================================================================
-
 DROP DATABASE IF EXISTS sakon_booking;
 CREATE DATABASE sakon_booking
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -61,7 +44,7 @@ CREATE TABLE Accommodation (
     address             TEXT,
     price               DECIMAL(10,2),
     description         TEXT,
-    type                ENUM('โรงแรม','อพาร์ทเม้น','บ้าน') NOT NULL,
+    type                ENUM('โรงแรม','อพาร์ทเม้น','หอพัก','รีสอร์ท') NOT NULL,
     district            VARCHAR(60)   NOT NULL DEFAULT 'เมืองสกลนคร',
     phone_number        VARCHAR(20),
     review_status       ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',

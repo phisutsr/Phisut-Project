@@ -19,9 +19,7 @@ try {
     foreach (['User', 'Property_Owner', 'Admin'] as $t) {
         $pdo->exec("DELETE FROM `$t`");
     }
-    // หมายเหตุ: ห้ามใช้ ALTER TABLE ... AUTO_INCREMENT ภายใน transaction เพราะเป็นคำสั่ง DDL
-    // ที่ MySQL จะ commit ให้ทันที ทำให้ตอน commit() ท้ายไฟล์เกิด "There is no active transaction"
-
+    
     $ownerMap = []; $userMap = []; $accMap = []; $roomMap = []; $bookingMap = []; $accName = [];
 
     $stAdmin = $pdo->prepare('INSERT INTO Admin (admin_email, first_name, last_name, password, phone_number, username, public_id) VALUES (?,?,?,?,?,?,?)');

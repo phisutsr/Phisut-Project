@@ -1,9 +1,4 @@
-/* =========================================================================
-   ครามสเตย์ สกลนคร — ระบบจองห้องพัก (ต้นแบบฝั่งหน้าเว็บ)
-   โครงสร้างข้อมูลทั้งหมดเก็บเป็น JSON และจำลอง API ด้วยฟังก์ชัน api.*
-   ========================================================================= */
-
-const DB_KEY = 'sakonstay.db.v2';   // ขึ้นเวอร์ชันใหม่ เพื่อไม่ให้ดึงข้อมูลเก่าใน localStorage มาใช้
+const DB_KEY = 'sakonstay.db.v2';   
 const SESSION_KEY = 'sakonstay.session';
 const B = n => Number(n||0).toLocaleString('th-TH');
 const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -13,7 +8,6 @@ const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return
 const nights = (a,b) => Math.max(1, Math.round((new Date(b)-new Date(a))/86400000));
 const thDate = s => s ? new Date(s).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'}) : '-';
 
-/* ---------- รูปภาพจำลอง: วาดเป็น SVG (ไม่เรียกรูปจากภายนอก) ---------- */
 function photo(seed, label){
   let h=0; for(const c of String(seed)) h=(h*31+c.charCodeAt(0))>>>0;
   const hues=[218,196,168,32,248,142], hue=hues[h%hues.length], l2=(h>>3)%14;
@@ -28,21 +22,16 @@ function photo(seed, label){
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
 }
 
-/* ---------- QR พร้อมเพย์จริง (สร้างจาก js/qr.js แบบ EMVCo สแกนด้วยแอปธนาคารได้) ---------- */
 const qrSVG = payload => QR.svg(payload, 'คิวอาร์โค้ดพร้อมเพย์สำหรับชำระเงิน');
 const maskPP = id => { const d=String(id||'').replace(/\D/g,''); return d.length>6 ? d.slice(0,3)+'x'.repeat(d.length-6)+d.slice(-3) : d; };
 
-/* =========================== ข้อมูลตั้งต้น (JSON) =========================== */
 const AMENITIES = ['แอร์','Wi‑Fi ฟรี','ที่จอดรถ','ทีวี','ตู้เย็น','เครื่องทำน้ำอุ่น','อาหารเช้า','สระว่ายน้ำ','ซักรีด','ลิฟต์','กล้องวงจรปิด','ครัวส่วนตัว'];
-/* ระบบนี้รับเฉพาะที่พักในเขตอำเภอเมืองสกลนคร และมีเพียง 4 ประเภทเท่านั้น */
-const DISTRICT = 'เมืองสกลนคร';                                   // อำเภอเดียวที่ระบบเปิดให้บริการ
-const PROP_TYPES = ['โรงแรม','อพาร์ทเม้น','บ้าน'];      // ประเภทที่พักที่เลือกได้ในหน้าแรก
+const DISTRICT = 'เมืองสกลนคร';                                   
+const PROP_TYPES = ['โรงแรม','อพาร์ทเม้น','หอพัก','รีสอร์ท'];      
 
-/* -------- ข้อมูลตั้งต้นอ่านจากไฟล์ JSON: data/seed.json -------- */
 let SEED = null;
 
 async function fetchSeed(){
-  // เชื่อมกับฐานข้อมูล MySQL จริงผ่าน XAMPP (api/get_data.php อ่านจากตาราง แล้วส่งกลับเป็น JSON รูปแบบเดียวกับ seed.json เดิม)
   const res = await fetch('api/get_data.php', {cache:'no-store'});
   if(!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
@@ -51,7 +40,6 @@ async function fetchSeed(){
 }
 function seed(){ return JSON.parse(JSON.stringify(SEED)); }
 
-/* เติมรูปภาพตัวอย่างให้รายการที่ยังไม่มีรูป (รูปสร้างเป็น SVG ในเครื่อง) */
 function fillPhotos(db){
   db.properties.forEach(p=>{
     if(!p.photos || !p.photos.length)
@@ -62,15 +50,13 @@ function fillPhotos(db){
   return db;
 }
 
-/* =========================== ชั้นข้อมูล + API จำลอง =========================== */
 let DB = null, session = null;
 function load(){
-  DB = seed(); fillPhotos(DB);     // ใช้ข้อมูลล่าสุดจากฐานข้อมูลเสมอ (ไม่อ่านสำเนาเก่าใน localStorage)
+  DB = seed(); fillPhotos(DB);    
   try{ const s = localStorage.getItem(SESSION_KEY); session = s ? JSON.parse(s) : null; }catch(e){ session = null; }
 }
 let savePromise = Promise.resolve();
 function save(){
-  // ส่งข้อมูลทั้งก้อนไปเขียนลง MySQL ต่อคิวกัน เพื่อไม่ให้การบันทึกซ้อนทับกัน
   const body = JSON.stringify(DB);
   savePromise = savePromise
     .then(()=>fetch('api/save_data.php', {method:'POST', headers:{'Content-Type':'application/json'}, body}))
@@ -78,7 +64,6 @@ function save(){
     .then(r=>{ if(r && r.ok===false){ console.error('บันทึกฐานข้อมูลไม่สำเร็จ:', r.error); toast('บันทึกลงฐานข้อมูลไม่สำเร็จ: ' + r.error, true); } })
     .catch(err=>{ console.error('เชื่อมต่อ api/save_data.php ไม่สำเร็จ:', err); toast('เชื่อมต่อฐานข้อมูลไม่ได้ ข้อมูลอาจยังไม่ถูกบันทึก', true); });
 }
-/* ดึงข้อมูลล่าสุดจากฐานข้อมูล (รอให้การบันทึกที่ค้างอยู่เสร็จก่อน) เพื่อให้จำนวนห้องว่าง/สถานะชำระเงินตรงกับความจริงเสมอ */
 async function refreshData(){
   await savePromise;
   try{ SEED = await fetchSeed(); DB = seed(); fillPhotos(DB); }catch(e){ console.warn('รีเฟรชข้อมูลไม่สำเร็จ ใช้ข้อมูลเดิมในหน้าไปก่อน', e); }
@@ -112,7 +97,6 @@ const api = {
     const u = DB.users.find(x=>x.email===email); u.password = pass; save(); return {ok:true};
   },
   properties(f={}){
-    // แสดงเฉพาะที่พักที่ผ่านการตรวจสอบ อยู่ในอำเภอเมืองสกลนคร และอยู่ใน 4 ประเภทที่ระบบกำหนด
     let list = DB.properties.filter(p =>
       p.status==='approved' && p.district===DISTRICT && PROP_TYPES.includes(p.type));
     if(f.q){ const q=f.q.toLowerCase(); list = list.filter(p=>(p.name+p.address+p.district+p.type).toLowerCase().includes(q)); }
