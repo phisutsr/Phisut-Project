@@ -61,7 +61,7 @@ CREATE TABLE Accommodation (
     address             TEXT,
     price               DECIMAL(10,2),
     description         TEXT,
-    type                ENUM('โรงแรม','อพาร์ทเม้น','หอพัก','รีสอร์ท') NOT NULL,
+    type                ENUM('โรงแรม','อพาร์ทเม้น','บ้าน') NOT NULL,
     district            VARCHAR(60)   NOT NULL DEFAULT 'เมืองสกลนคร',
     phone_number        VARCHAR(20),
     review_status       ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
