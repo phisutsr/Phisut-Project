@@ -132,10 +132,28 @@ const canReview = b => !!session && b.userId===session.id && stayDone(b) && !DB.
 // ห้องที่ผ่านวันเช็กเอาต์แล้วถือว่าคืนเข้าระบบ
 const takesRoom = b => ACTIVE_ST.includes(b.status) && ['waiting','paid'].includes(b.payStatus) && b.checkOut > today();
 const sumQty = list => list.reduce((s,b)=>s+Number(b.qty||1),0);
-const booked = rid => sumQty(DB.bookings.filter(b=>b.roomId===rid && takesRoom(b)));
 const heldUnpaid = rid => sumQty(DB.bookings.filter(b=>b.roomId===rid && ACTIVE_ST.includes(b.status) && b.payStatus==='unpaid'));
-const canHold = b => { const r=room(b.roomId); return r.status==='available' && (Number(r.qty) - (booked(b.roomId) - (takesRoom(b)?Number(b.qty||1):0))) >= Number(b.qty||1); };
-const freeQty = rid => { const r=room(rid); return r.status==='available' ? Math.max(0, r.qty - booked(rid)) : 0; };
+
+/* ---- เช็กห้องว่างตามช่วงวัน: การจองหนึ่งรายการใช้ห้องตั้งแต่คืนเช็กอิน ถึงคืนก่อนวันเช็กเอาต์ [checkIn, checkOut)
+        วันเช็กเอาต์ของคนเก่า = วันเช็กอินของคนใหม่ได้ (ไม่นับซ้อน) ---- */
+const overlaps = (b, ci, co) => b.checkIn < co && b.checkOut > ci;
+// จำนวนห้องที่ถูกใช้มากที่สุดในแต่ละคืนของช่วง ci..co (ไม่นับการจอง excludeId)
+function bookedBetween(rid, ci, co, excludeId){
+  const list = DB.bookings.filter(b=>b.roomId===rid && b.id!==excludeId && takesRoom(b) && overlaps(b, ci, co));
+  if(!list.length) return 0;
+  let peak = 0;
+  for(let d=ci; d<co; d=addDays(d,1)){
+    const used = sumQty(list.filter(b=>b.checkIn<=d && d<b.checkOut));
+    if(used>peak) peak = used;
+  }
+  return peak;
+}
+// ห้องว่างในช่วงวันที่เลือก
+const freeQtyRange = (rid, ci, co, excludeId) => { const r=room(rid); return r.status==='available' ? Math.max(0, Number(r.qty) - bookedBetween(rid, ci, co, excludeId)) : 0; };
+// ห้องว่างคืนนี้ (ใช้แสดงในหน้ารายละเอียดที่พัก)
+const freeQty = rid => freeQtyRange(rid, today(), addDays(today(),1));
+// ตรวจก่อนรับชำระ: ช่วงวันของการจองนี้ยังมีห้องพอหรือไม่
+const canHold = b => freeQtyRange(b.roomId, b.checkIn, b.checkOut, b.id) >= Number(b.qty||1);
 
 const ST = {
   pending:['รอยืนยัน','t-wait'], confirmed:['ยืนยันแล้ว','t-ok'], checkedin:['เข้าพักแล้ว','t-info'],
@@ -298,10 +316,10 @@ function viewProperty(id){
               </div>
               <div style="text-align:right">
                 <div class="price">฿${B(r.price)}</div>
-                <div class="tiny muted" style="margin-bottom:6px">ว่าง <b>${freeQty(r.id)}</b> / ${r.qty} ห้อง${heldUnpaid(r.id)?` · รอชำระ ${heldUnpaid(r.id)}`:''}</div>
-                ${freeQty(r.id)>0
-                  ? `<a class="btn sm" href="#/book/${r.id}">จองห้องนี้</a>`
-                  : `<button class="btn sm" disabled>เต็ม</button>`}
+                <div class="tiny muted" style="margin-bottom:6px">ว่างคืนนี้ <b>${freeQty(r.id)}</b> / ${r.qty} ห้อง${heldUnpaid(r.id)?` · รอชำระ ${heldUnpaid(r.id)}`:''}</div>
+                ${r.status==='available'
+                  ? `<a class="btn sm" href="#/book/${r.id}">${freeQty(r.id)>0?'จองห้องนี้':'ดูวันว่าง / จอง'}</a>`
+                  : `<button class="btn sm" disabled>ไม่เปิดจอง</button>`}
               </div>
             </div>`).join('') || '<div class="empty">ยังไม่ได้เพิ่มห้องพัก</div>'}
           </div>
@@ -343,14 +361,14 @@ function viewBook(rid){
   app().innerHTML = `<section class="block wrap" style="max-width:760px">
     <h2>ทำรายการจอง</h2>
     <div class="sheet mt">
-      <div class="sheet-h"><h3>${esc(p.name)} — ${esc(r.type)}</h3><span class="tiny muted">ว่าง ${freeQty(rid)} ห้อง</span></div>
+      <div class="sheet-h"><h3>${esc(p.name)} — ${esc(r.type)}</h3><span class="tiny muted" id="avail"></span></div>
       <div class="sheet-b">
         <div class="grid2">
           <label class="f"><span>วันเช็กอิน</span><input type="date" id="ci" value="${today()}" min="${today()}" onchange="calcTotal('${rid}')"></label>
           <label class="f"><span>วันเช็กเอาต์</span><input type="date" id="co" value="${addDays(today(),1)}" min="${addDays(today(),1)}" onchange="calcTotal('${rid}')"></label>
         </div>
         <div class="grid2">
-          <label class="f"><span>จำนวนห้อง</span><input type="number" id="qty" value="1" min="1" max="${freeQty(rid)}" onchange="calcTotal('${rid}')"></label>
+          <label class="f"><span>จำนวนห้อง</span><input type="number" id="qty" value="1" min="1" onchange="calcTotal('${rid}')"></label>
           <label class="f"><span>เบอร์โทรติดต่อกลับ</span><input id="tel" value="${esc(me().phone||'')}"></label>
         </div>
         <label class="f"><span>ข้อความถึงเจ้าของที่พัก (ถ้ามี)</span><textarea id="note" placeholder="เช่น เข้าพักดึก ขอที่จอดรถ"></textarea></label>
@@ -362,8 +380,16 @@ function viewBook(rid){
   calcTotal(rid);
 }
 function calcTotal(rid){
-  const r = room(rid), ci = document.getElementById('ci').value, co = document.getElementById('co').value;
+  const ciEl = document.getElementById('ci'), coEl = document.getElementById('co');
+  if(ciEl.value){ coEl.min = addDays(ciEl.value,1); if(!coEl.value || coEl.value <= ciEl.value) coEl.value = addDays(ciEl.value,1); }
+  const r = room(rid), ci = ciEl.value, co = coEl.value;
   const q = Number(document.getElementById('qty').value||1), n = nights(ci,co);
+  const av = document.getElementById('avail');
+  if(av){
+    if(co > ci){ const f = freeQtyRange(rid, ci, co); av.innerHTML = f>0 ? `ช่วงวันที่เลือกว่าง <b>${f}</b> ห้อง` : '<b style="color:var(--bad,#b42318)">ช่วงวันที่เลือกเต็ม กรุณาเลือกวันอื่น</b>';
+      document.getElementById('qty').max = Math.max(1,f); }
+    else av.textContent = '';
+  }
   document.getElementById('sum').innerHTML =
     `฿${B(r.price)} × ${n} คืน × ${q} ห้อง = <b style="color:var(--ink);font-size:1.1rem">฿${B(r.price*n*q)}</b><br>
      <span class="tiny">ระบบรับชำระแบบเต็มจำนวนเท่านั้น · จำนวนห้องว่างจะถูกหักเมื่อชำระเงินแล้ว</span>`;
@@ -372,7 +398,9 @@ function submitBooking(rid){
   const r = room(rid), ci = document.getElementById('ci').value, co = document.getElementById('co').value;
   const q = Number(document.getElementById('qty').value||1);
   if(new Date(co) <= new Date(ci)) return toast('วันเช็กเอาต์ต้องหลังวันเช็กอิน', true);
-  if(q > freeQty(rid)) return toast('จำนวนห้องเกินจำนวนที่ว่างอยู่', true);
+  const free = freeQtyRange(rid, ci, co);
+  if(free < 1) return toast('ช่วงวันที่เลือกห้องเต็มแล้ว กรุณาเลือกวันอื่น', true);
+  if(q > free) return toast('ช่วงวันที่เลือกเหลือห้องว่างเพียง ' + free + ' ห้อง', true);
   const b = api.book({userId:session.id, propertyId:r.propertyId, roomId:rid, checkIn:ci, checkOut:co, qty:q,
     total:r.price*nights(ci,co)*q, note:document.getElementById('note').value});
   const tel = document.getElementById('tel').value; const u = me(); if(tel){ u.phone = tel; save(); }
