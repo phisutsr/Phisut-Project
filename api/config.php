@@ -64,6 +64,18 @@ try {
         setting_key   VARCHAR(40) PRIMARY KEY,
         setting_value TEXT
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // ตารางโทเคนรีเซ็ตรหัสผ่าน (เก็บเฉพาะค่าแฮชของโทเคน; อ้างบัญชีด้วย public_id เพราะ save_data.php ล้างและสร้างตารางผู้ใช้ใหม่ทุกครั้ง)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS Password_Reset (
+        reset_id          INT AUTO_INCREMENT PRIMARY KEY,
+        token_hash        CHAR(64)    NOT NULL UNIQUE,
+        account_role      VARCHAR(10) NOT NULL,
+        account_public_id VARCHAR(30) NOT NULL,
+        email             VARCHAR(120) NOT NULL,
+        expires_at        DATETIME    NOT NULL,
+        used_at           DATETIME    NULL,
+        created_at        DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_email_created (email, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 } catch (PDOException $e) {
 
 }

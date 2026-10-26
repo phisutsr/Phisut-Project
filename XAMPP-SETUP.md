@@ -76,3 +76,17 @@
 - ฐานข้อมูลเก็บ `Accommodation.rating_avg` และ `Accommodation.review_count`
 
 > ฐานข้อมูลเดิมที่ import ไว้แล้ว **ไม่ต้อง import ใหม่** `api/config.php` จะเพิ่มคอลัมน์ที่จำเป็นให้เองในการเรียกครั้งแรก
+
+## ตั้งค่าอีเมลสำหรับระบบ "ลืมรหัสผ่าน"
+
+ระบบจะส่งลิงก์ตั้งรหัสผ่านใหม่ (ใช้ได้ 30 นาที ครั้งเดียว) ไปที่อีเมลของสมาชิก ต้องตั้งค่าบัญชีส่งอีเมลก่อน
+
+**XAMPP / เครื่องตัวเอง**
+1. คัดลอก `api/mail_config.example.php` เป็น `api/mail_config.php`
+2. แก้ค่า `user`, `pass`, `from` (ตัวอย่างเป็น Gmail: ต้องสร้าง App password 16 หลัก ไม่ใช่รหัสผ่านล็อกอินปกติ)
+3. ตั้ง `'app_url'` เป็นที่อยู่เว็บของคุณ เช่น `http://localhost/sakon-stay` (เว้นว่างได้ ระบบจะอนุมานเอง)
+4. ทดสอบการส่ง: เปิด `http://localhost/sakon-stay/api/mail_test.php` (ต้องตั้ง `'debug' => true`) จะส่งเมลทดสอบหาตัวเองและบอกสาเหตุถ้าไม่สำเร็จ
+5. ถ้าเจอ `certificate verify failed` บน Windows ให้ตั้ง `'verify_tls' => false` (เฉพาะทดสอบในเครื่อง)
+
+**Railway**: ตั้งตัวแปร `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `APP_URL`
+(ตัวอย่าง `APP_URL=https://ชื่อแอป.up.railway.app`) ส่วนตาราง `Password_Reset` ระบบสร้างให้เองอัตโนมัติ

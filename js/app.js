@@ -84,18 +84,6 @@ const api = {
     if(DB.users.some(u=>u.username===d.username)) return {ok:false, error:'ชื่อผู้ใช้นี้ถูกใช้แล้ว เลือกชื่ออื่น'};
     const u = {id:uid('U'), ...d}; DB.users.push(u); save(); return {ok:true, user:u};
   },
-  resetPassword(email){
-    const u = DB.users.find(x=>x.email===email);
-    if(!u) return {ok:false, error:'ไม่พบอีเมลนี้ในระบบ'};
-    const code = Math.floor(100000+Math.random()*900000);
-    DB.resets.push({email, code, at:new Date().toISOString()}); save();
-    return {ok:true, code};
-  },
-  confirmReset(email, code, pass){
-    const r = DB.resets.slice().reverse().find(x=>x.email===email && String(x.code)===String(code));
-    if(!r) return {ok:false, error:'รหัสยืนยันไม่ถูกต้อง'};
-    const u = DB.users.find(x=>x.email===email); u.password = pass; save(); return {ok:true};
-  },
   properties(f={}){
     let list = DB.properties.filter(p =>
       p.status==='approved' && p.district===DISTRICT && PROP_TYPES.includes(p.type));
@@ -635,28 +623,72 @@ function doRegister(){
 function viewForgot(){
   app().innerHTML = `<div class="wrap"><div class="authwrap">
     <div class="sheet"><div class="sheet-h"><h3>ลืมรหัสผ่าน</h3></div><div class="sheet-b">
-      <p class="small muted" style="margin-top:0">กรอกอีเมลที่ใช้สมัคร ระบบจะส่งรหัสยืนยัน 6 หลักเพื่อตั้งรหัสผ่านใหม่</p>
-      <label class="f"><span>อีเมล</span><input id="fg_email" type="email"></label>
-      <button class="btn" onclick="sendReset()">ขอรหัสยืนยัน</button>
+      <p class="small muted" style="margin-top:0">กรอกอีเมลที่ใช้สมัคร เราจะส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ไปให้ทางอีเมล (ลิงก์ใช้ได้ 30 นาที)</p>
+      <label class="f"><span>อีเมล</span><input id="fg_email" type="email" autocomplete="email"></label>
+      <button class="btn" id="fg_btn" style="width:100%" onclick="sendReset()">ส่งลิงก์ตั้งรหัสผ่านใหม่</button>
       <div id="fg_step" class="mt"></div>
+      <div class="mt center small"><a href="#/login">กลับไปเข้าสู่ระบบ</a></div>
     </div></div>
   </div></div>`;
+  document.getElementById('fg_email').addEventListener('keydown', e=>{ if(e.key==='Enter') sendReset(); });
 }
-function sendReset(){
+async function sendReset(){
   const email = document.getElementById('fg_email').value.trim();
-  const r = api.resetPassword(email);
-  if(!r.ok) return toast(r.error, true);
-  document.getElementById('fg_step').innerHTML = `
-    <div class="note">จำลองการส่งอีเมล — รหัสยืนยันของคุณคือ <b>${r.code}</b></div>
-    <label class="f mt"><span>รหัสยืนยัน 6 หลัก</span><input id="fg_code" inputmode="numeric"></label>
-    <label class="f"><span>รหัสผ่านใหม่</span><input id="fg_new" type="password"></label>
-    <button class="btn" onclick="confirmReset()">ตั้งรหัสผ่านใหม่</button>`;
+  const btn = document.getElementById('fg_btn');
+  if(!email) return toast('กรุณากรอกอีเมล', true);
+  btn.disabled = true; btn.textContent = 'กำลังส่ง...';
+  try{
+    const res = await fetch('api/forgot.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email})});
+    const r = await res.json();
+    if(!r.ok){ toast(r.error || 'ส่งคำขอไม่สำเร็จ', true); btn.disabled = false; btn.textContent = 'ส่งลิงก์ตั้งรหัสผ่านใหม่'; return; }
+    if(r.debug) console.warn('[MAIL_DEBUG] ส่งอีเมลไม่สำเร็จ:', r.debug);
+    document.getElementById('fg_step').innerHTML = `<div class="note">หากอีเมล <b>${esc(email)}</b> มีในระบบ เราได้ส่งลิงก์ตั้งรหัสผ่านใหม่ไปให้แล้ว
+      กรุณาตรวจกล่องจดหมาย (รวมถึงอีเมลขยะ) ลิงก์ใช้ได้ภายใน 30 นาที</div>`;
+    btn.textContent = 'ส่งแล้ว';
+  }catch(e){
+    toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่', true);
+    btn.disabled = false; btn.textContent = 'ส่งลิงก์ตั้งรหัสผ่านใหม่';
+  }
 }
-function confirmReset(){
-  const r = api.confirmReset(document.getElementById('fg_email').value.trim(),
-    document.getElementById('fg_code').value.trim(), document.getElementById('fg_new').value);
-  if(!r.ok) return toast(r.error, true);
-  toast('ตั้งรหัสผ่านใหม่แล้ว เข้าสู่ระบบได้ทันที'); go('#/login');
+/* หน้าที่เปิดจากลิงก์ในอีเมล: #/reset?token=... */
+let resetToken = '';
+async function viewReset(qs){
+  resetToken = (qs.get('token') || '').trim();
+  app().innerHTML = `<div class="wrap"><div class="authwrap"><div class="sheet"><div class="sheet-h"><h3>ตั้งรหัสผ่านใหม่</h3></div>
+    <div class="sheet-b" id="rs_body"><p class="small muted" style="margin:0">กำลังตรวจสอบลิงก์...</p></div></div></div></div>`;
+  const body = document.getElementById('rs_body');
+  const bad = msg => { body.innerHTML = `<div class="note">${esc(msg)}</div>
+      <div class="mt"><a class="btn" href="#/forgot">ขอลิงก์ใหม่</a></div>`; };
+  if(!/^[a-f0-9]{64}$/.test(resetToken)) return bad('ลิงก์ไม่ถูกต้อง กรุณาขอลิงก์ใหม่');
+  try{
+    const res = await fetch('api/reset.php?token=' + encodeURIComponent(resetToken), {cache:'no-store'});
+    const r = await res.json();
+    if(!r.ok) return bad(r.error || 'ลิงก์ไม่ถูกต้องหรือหมดอายุแล้ว');
+  }catch(e){ return bad('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่'); }
+  body.innerHTML = `
+    <label class="f"><span>รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)</span><input id="rs_p1" type="password" autocomplete="new-password"></label>
+    <label class="f"><span>ยืนยันรหัสผ่านใหม่</span><input id="rs_p2" type="password" autocomplete="new-password"></label>
+    <button class="btn" id="rs_btn" style="width:100%" onclick="confirmReset()">บันทึกรหัสผ่านใหม่</button>`;
+  document.getElementById('rs_p2').addEventListener('keydown', e=>{ if(e.key==='Enter') confirmReset(); });
+}
+async function confirmReset(){
+  const p1 = document.getElementById('rs_p1').value, p2 = document.getElementById('rs_p2').value;
+  const btn = document.getElementById('rs_btn');
+  if(p1.length < 6) return toast('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร', true);
+  if(p1 !== p2) return toast('รหัสผ่านทั้งสองช่องไม่ตรงกัน', true);
+  btn.disabled = true;
+  try{
+    const res = await fetch('api/reset.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:resetToken, password:p1})});
+    const r = await res.json();
+    if(!r.ok){
+      toast(r.error || 'ตั้งรหัสผ่านไม่สำเร็จ', true);
+      if(/ลิงก์/.test(r.error||'')) return viewReset(new URLSearchParams({token:resetToken}));
+      btn.disabled = false; return;
+    }
+    resetToken = '';
+    await refreshData();                       // โหลดรหัสผ่านใหม่จากฐานข้อมูลก่อน ไม่งั้นล็อกอินด้วยรหัสใหม่ไม่ผ่าน
+    toast('ตั้งรหัสผ่านใหม่แล้ว เข้าสู่ระบบได้ทันที'); go('#/login');
+  }catch(e){ toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่', true); btn.disabled = false; }
 }
 
 /* ============================ เจ้าของที่พัก ============================ */
@@ -1055,6 +1087,7 @@ async function route(skipRefresh){
   else if(head==='login') viewLogin();
   else if(head==='register') viewRegister();
   else if(head==='forgot') viewForgot();
+  else if(head==='reset') viewReset(qs);
   else if(head==='owner') viewOwner();
   else if(head==='admin') viewAdmin();
   else notFound();
