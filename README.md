@@ -92,3 +92,9 @@ mysql -u root -p < sql/sakon_stay.sql
 - `Room.accommodation_id` เป็นคีย์นอกไปยัง `Accommodation` เพราะของเดิมอ้างถึงที่พักด้วยชื่อเท่านั้น
 - `Accommodation.district` + `CHECK (district = 'เมืองสกลนคร')` และ `type` แบบ ENUM 4 ค่า เพื่อบังคับเงื่อนไขของระบบ
 - คอลัมน์ `username` / `email` ของผู้ใช้ และ `pay_status` / `slip_path` ของการจอง เพราะหน้าเว็บต้องใช้
+
+# linkproject
+
+สามารถรับชมคลิปการทำงานของระบบได้ที่ลิงก์ด้านล่าง
+
+[คลิกเพื่อรับชมคลิป](https://drive.google.com/file/d/1OOt_55Ksua2qytjIFYq0E9CnxprO6AZN/view?usp=drive_link)
