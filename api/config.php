@@ -45,13 +45,14 @@ try {
         WHERE TABLE_SCHEMA = DATABASE() AND (
           (LOWER(TABLE_NAME)='accommodation' AND COLUMN_NAME IN ('promptpay_id','rating_avg','review_count','photos')) OR
           (LOWER(TABLE_NAME)='room' AND COLUMN_NAME IN ('room_available','photos')) OR
-          (LOWER(TABLE_NAME)='booking' AND COLUMN_NAME='slip_path'))");
+          (LOWER(TABLE_NAME)='booking' AND COLUMN_NAME IN ('slip_path','hold_until')))");
     foreach ($q->fetchAll() as $r) { $have[$r['t'] . '.' . $r['c']] = strtolower($r['d']); }
     $add = [
         'accommodation.promptpay_id' => 'ALTER TABLE Accommodation ADD COLUMN promptpay_id VARCHAR(20) NULL',
         'accommodation.rating_avg'   => 'ALTER TABLE Accommodation ADD COLUMN rating_avg DECIMAL(3,2) NOT NULL DEFAULT 0',
         'accommodation.review_count' => 'ALTER TABLE Accommodation ADD COLUMN review_count INT NOT NULL DEFAULT 0',
         'room.room_available'        => 'ALTER TABLE Room ADD COLUMN room_available INT NOT NULL DEFAULT 0',
+        'booking.hold_until'         => 'ALTER TABLE Booking ADD COLUMN hold_until BIGINT NULL',   // เวลาหมดอายุการกันห้อง (มิลลิวินาที)
     ];
     foreach ($add as $k => $sql) { if (!isset($have[$k])) $pdo->exec($sql); }
     $big = [

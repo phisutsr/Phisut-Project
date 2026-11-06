@@ -94,7 +94,7 @@ const api = {
   },
   book(d){
     const b = {id:uid('B'), code:'SKN-'+Math.floor(100000+Math.random()*899999), status:'pending', payStatus:'unpaid',
-               payMethod:'QR code', slip:null, createdAt:today(), note:'', ...d};
+               payMethod:'QR code', slip:null, createdAt:today(), note:'', holdUntil:Date.now()+HOLD_MS, ...d};
     DB.bookings.push(b); save(); return b;
   }
 };
@@ -113,14 +113,24 @@ function ratingStats(pid){
   return {count: vs.length, avg: vs.length ? sum/vs.length : 0, dist};
 }
 const ratingOf = pid => ratingStats(pid).avg;
-/* ---- จำนวนห้องคงเหลือ: หักเมื่อผู้จองชำระเงินแล้ว (ส่งสลิป/เจ้าของยืนยัน) และคืนห้องเมื่อยกเลิกหรือสลิปไม่ผ่าน ---- */
+/* ---- จำนวนห้องคงเหลือ: หักทันทีที่กดจอง (กันห้อง 30 นาที) และหลังส่งสลิป/ชำระแล้ว คืนห้องเมื่อหมดเวลา ยกเลิก หรือสลิปไม่ผ่าน ---- */
 const ACTIVE_ST = ['pending','confirmed','checkedin'];
 const stayDone = b => b.status==='completed' || (b.payStatus==='paid' && ['confirmed','checkedin'].includes(b.status) && b.checkOut <= today());
 const canReview = b => !!session && b.userId===session.id && stayDone(b) && !DB.reviews.some(v=>v.bookingId===b.id);
 // ห้องที่ผ่านวันเช็กเอาต์แล้วถือว่าคืนเข้าระบบ
-const takesRoom = b => ACTIVE_ST.includes(b.status) && ['waiting','paid'].includes(b.payStatus) && b.checkOut > today();
+/* ---- กันห้องทันทีที่กดยืนยันการจอง ให้เวลาชำระ HOLD_MIN นาที: ระหว่างนี้ห้องถูกกันไว้ ถ้าเกินเวลาโดยยังไม่ส่งสลิป การจองถูกยกเลิกและคืนห้อง ---- */
+const HOLD_MIN = 30, HOLD_MS = HOLD_MIN*60*1000;
+const holdActive = b => b.payStatus==='unpaid' && !!b.holdUntil && Date.now() < b.holdUntil;   // ยังอยู่ในเวลากันห้อง
+const lapsed     = b => b.payStatus==='unpaid' && !!b.holdUntil && Date.now() >= b.holdUntil;  // หมดเวลาแล้วและยังไม่ได้จ่าย
+function expireHolds(){          // ยกเลิกการจองที่หมดเวลาชำระ (ห้องคืนเข้าระบบ)
+  let changed = false;
+  DB.bookings.forEach(b=>{ if(lapsed(b) && b.status!=='cancelled'){ b.status = 'cancelled'; changed = true; } });
+  if(changed) save();
+  return changed;
+}
+const takesRoom = b => ACTIVE_ST.includes(b.status) && b.checkOut > today() && (['waiting','paid'].includes(b.payStatus) || holdActive(b));
 const sumQty = list => list.reduce((s,b)=>s+Number(b.qty||1),0);
-const heldUnpaid = rid => sumQty(DB.bookings.filter(b=>b.roomId===rid && ACTIVE_ST.includes(b.status) && b.payStatus==='unpaid'));
+const heldUnpaid = rid => sumQty(DB.bookings.filter(b=>b.roomId===rid && ACTIVE_ST.includes(b.status) && holdActive(b)));
 
 /* ---- เช็กห้องว่างตามช่วงวัน: การจองหนึ่งรายการใช้ห้องตั้งแต่คืนเช็กอิน ถึงคืนก่อนวันเช็กเอาต์ [checkIn, checkOut)
         วันเช็กเอาต์ของคนเก่า = วันเช็กอินของคนใหม่ได้ (ไม่นับซ้อน) ---- */
@@ -329,7 +339,7 @@ function viewProperty(id){
             <p class="small" style="margin:0 0 4px"><b>ชื่อผู้ดูแล</b><br>${esc(user(p.ownerId).name||'-')}</p>
             <p class="small" style="margin:10px 0 4px"><b>เบอร์โทร</b><br><a href="tel:${esc(p.phone)}">${esc(p.phone)}</a></p>
             <p class="small" style="margin:10px 0 4px"><b>ที่อยู่</b><br>${esc(p.address)}</p>
-            <div class="note mt">ชำระเงินผ่าน QR code เต็มจำนวนหลังทำรายการจอง แล้วอัปโหลดหลักฐานให้เจ้าของที่พักตรวจสอบ</div>
+            <div class="note mt">เมื่อกดยืนยันการจอง ระบบจะกันห้องให้ทันที ต้องชำระผ่าน QR code และอัปโหลดสลิปภายใน ${HOLD_MIN} นาที หากเกินเวลาการจองจะถูกยกเลิกและคืนห้องอัตโนมัติ</div>
           </div>
         </div>
       </aside>
@@ -392,7 +402,7 @@ function submitBooking(rid){
   const b = api.book({userId:session.id, propertyId:r.propertyId, roomId:rid, checkIn:ci, checkOut:co, qty:q,
     total:r.price*nights(ci,co)*q, note:document.getElementById('note').value});
   const tel = document.getElementById('tel').value; const u = me(); if(tel){ u.phone = tel; save(); }
-  toast('สร้างรายการจอง ' + b.code + ' แล้ว');
+  toast('จองห้องให้แล้ว (' + b.code + ') กรุณาชำระเงินภายใน ' + HOLD_MIN + ' นาที');
   go('#/pay/' + b.id);
 }
 
@@ -414,8 +424,8 @@ function viewPay(bid){
             <tr><td class="muted">ช่องทาง</td><td style="text-align:right">QR code (พร้อมเพย์)</td></tr>
             <tr><td class="muted">ยอดที่ต้องชำระ</td><td style="text-align:right"><b class="price">฿${B(b.total)}</b></td></tr>
           </tbody></table>
-          <div class="note mt">ระบบกำหนดให้ชำระเต็มจำนวนครั้งเดียว เปิดแอปธนาคารสแกน QR แล้วอัปโหลดสลิปเพื่อให้เจ้าของที่พักตรวจสอบ เมื่อส่งสลิปแล้วห้องจะถูกหักออกจากจำนวนห้องว่างทันที</div>
-          ${b.payStatus==='paid' ? '<p class="mt" style="color:var(--han)">เจ้าของที่พักยืนยันการชำระเงินเรียบร้อยแล้ว</p>' : !payload && b.payStatus==='unpaid' ? '<p class="mt" style="color:var(--bad,#b42318)">เจ้าของที่พักยังไม่ได้ตั้งค่าพร้อมเพย์ จึงยังชำระเงินผ่านระบบไม่ได้ กรุณาติดต่อที่พักโดยตรง</p>' : `
+          <div class="note mt">ระบบกำหนดให้ชำระเต็มจำนวนครั้งเดียว เปิดแอปธนาคารสแกน QR แล้วอัปโหลดสลิปเพื่อให้เจ้าของที่พักตรวจสอบ ห้องถูกกันไว้ให้คุณตั้งแต่กดยืนยันการจอง หากไม่ชำระภายใน ${HOLD_MIN} นาที ระบบจะยกเลิกการจองและคืนห้องอัตโนมัติ</div>
+          ${lapsed(b) ? '<p class="mt" style="color:var(--bad,#b42318)"><b>หมดเวลาชำระเงิน</b> การจองนี้ถูกยกเลิกและคืนห้องแล้ว ไม่สามารถชำระเงินได้ กรุณาทำรายการจองใหม่</p>' : b.payStatus==='paid' ? '<p class="mt" style="color:var(--han)">เจ้าของที่พักยืนยันการชำระเงินเรียบร้อยแล้ว</p>' : !payload && b.payStatus==='unpaid' ? '<p class="mt" style="color:var(--bad,#b42318)">เจ้าของที่พักยังไม่ได้ตั้งค่าพร้อมเพย์ จึงยังชำระเงินผ่านระบบไม่ได้ กรุณาติดต่อที่พักโดยตรง</p>' : `
           <label class="f mt"><span>อัปโหลดหลักฐานการโอน</span><input type="file" accept="image/*" id="slip"></label>
           <button class="btn" onclick="uploadSlip('${b.id}')">ส่งหลักฐานการชำระเงิน</button>`}
           ${b.slip ? `<div class="mt"><div class="tiny muted">หลักฐานที่ส่งแล้ว</div><img class="slip" src="${b.slip}" alt="หลักฐานการชำระเงิน"></div>` : ''}
@@ -423,15 +433,41 @@ function viewPay(bid){
         </div>
       </div>
       <div class="qrbox">
-        ${payload ? `
+        ${lapsed(b) ? `<div class="pp">พร้อมเพย์ · ${esc(p.name)}</div><div class="small mt" style="color:var(--bad,#b42318)"><b>หมดเวลาชำระเงินแล้ว</b> QR นี้ใช้ชำระไม่ได้</div>` : payload ? `
         <div class="pp">พร้อมเพย์ · ${esc(p.name)}</div>
         <div class="qrimg">${qrSVG(payload)}</div>
         <div class="small mt">สแกนเพื่อโอน <b>฿${B(b.total)}</b></div>
         <div class="tiny muted">บัญชีพร้อมเพย์ ${esc(maskPP(p.promptpay))} · อ้างอิง ${b.code}</div>`
         : `<div class="pp">พร้อมเพย์ · ${esc(p.name)}</div><div class="small muted mt">ยังไม่มี QR เพราะเจ้าของที่พักยังไม่ได้ตั้งค่าเลขพร้อมเพย์</div>`}
+        ${holdActive(b) ? `<div class="mt" style="text-align:center;border-top:1px solid var(--line);padding-top:12px">
+          <div class="tiny muted">กรุณาชำระและส่งสลิปภายใน ${HOLD_MIN} นาที</div>
+          <div id="cdwrap" style="font-size:1.25em;font-weight:700">เหลือเวลา <span id="cd"></span></div></div>` : ''}
       </div>
     </div>
   </section>`;
+  stopCountdown(); if(holdActive(b)) startCountdown(b.id);
+}
+
+/* ---- นับถอยหลังเวลาชำระเงิน แสดงใต้ QR ---- */
+let holdTimer = null;
+function stopCountdown(){ if(holdTimer){ clearInterval(holdTimer); holdTimer = null; } }
+const fmtLeft = ms => { const s = Math.max(0, Math.ceil(ms/1000)); return Math.floor(s/60) + ' นาที ' + String(s%60).padStart(2,'0') + ' วินาที'; };
+function startCountdown(bid){
+  stopCountdown();
+  const tick = () => {
+    const el = document.getElementById('cd'), wrap = document.getElementById('cdwrap');
+    if(!el){ stopCountdown(); return; }                                   // ออกจากหน้านี้แล้ว
+    const b = DB.bookings.find(x=>x.id===bid);
+    if(!b || !holdActive(b)){                                              // หมดเวลา (หรือชำระแล้ว)
+      stopCountdown();
+      if(b && lapsed(b)){ expireHolds(); toast('หมดเวลาชำระเงิน ' + HOLD_MIN + ' นาที การจองถูกยกเลิกและคืนห้องแล้ว', true); }
+      route(true); return;
+    }
+    const left = b.holdUntil - Date.now();
+    el.textContent = fmtLeft(left);
+    wrap.style.color = left < 5*60*1000 ? 'var(--bad,#b42318)' : '';       // เหลือน้อยกว่า 5 นาทีให้เป็นสีแดง
+  };
+  tick(); holdTimer = setInterval(tick, 1000);
 }
 function readSlip(file){   // ย่อรูปสลิปให้เล็กลงก่อนเก็บลงฐานข้อมูล
   return new Promise((resolve,reject)=>{
@@ -450,12 +486,14 @@ async function uploadSlip(bid){
   if(!f) return toast('กรุณาเลือกไฟล์รูปสลิปการโอนก่อน', true);
   if(!/^image\//.test(f.type)) return toast('ไฟล์สลิปต้องเป็นรูปภาพเท่านั้น', true);
   await refreshData();                                   // เช็กจำนวนห้องล่าสุดก่อนหักห้อง
+  expireHolds();
   const cur = DB.bookings.find(x=>x.id===bid);
+  if(cur && lapsed(cur)){ toast('หมดเวลาชำระเงิน ' + HOLD_MIN + ' นาทีแล้ว ไม่สามารถส่งสลิปได้ กรุณาจองใหม่', true); return route(true); }
   if(!cur || cur.status==='cancelled') return toast('การจองนี้ถูกยกเลิกแล้ว', true);
   if(!canHold(cur)){ toast('ขออภัย ห้องประเภทนี้เต็มแล้ว จึงยังชำระเงินไม่ได้ กรุณายกเลิกและเลือกห้องอื่น', true); return route(); }
   try{ cur.slip = await readSlip(f); }catch(e){ return toast(e.message, true); }
   cur.payStatus = 'waiting'; save();
-  toast('ส่งหลักฐานแล้ว หักห้องออกจากจำนวนห้องว่างเรียบร้อย รอเจ้าของที่พักตรวจสอบ'); route();
+  toast('ส่งหลักฐานแล้ว ห้องถูกกันไว้ให้คุณเรียบร้อย รอเจ้าของที่พักตรวจสอบ'); route();
 }
 
 /* ---------------------------- การจองของฉัน ---------------------------- */
@@ -470,7 +508,7 @@ function viewBookings(){
     return `<tr>
       <td><b>${b.code}</b><div class="tiny muted">${esc(p.name)} · ${esc(r.type)}</div></td>
       <td>${thDate(b.checkIn)} – ${thDate(b.checkOut)}<div class="tiny muted">${b.qty} ห้อง</div></td>
-      <td>฿${B(b.total)}<div class="tiny">${tag(PS,b.payStatus)}</div></td>
+      <td>฿${B(b.total)}<div class="tiny">${tag(PS,b.payStatus)}</div>${holdActive(b)?`<div class="tiny" style="color:var(--bad,#b42318)">ชำระภายใน ${Math.max(1,Math.ceil((b.holdUntil-Date.now())/60000))} นาที</div>`:lapsed(b)?'<div class="tiny muted">หมดเวลาชำระเงิน</div>':''}</td>
       <td>${tag(ST,b.status)}</td>
       <td style="text-align:right;white-space:nowrap">
         ${b.payStatus!=='paid' && b.status!=='cancelled' ? `<a class="btn sm" href="#/pay/${b.id}">ชำระเงิน</a> ` : ''}
@@ -1069,12 +1107,14 @@ let routeSeq = 0;
 const LIVE_PAGES = ['', 'search', 'property', 'book', 'pay', 'bookings', 'owner', 'admin'];
 async function route(skipRefresh){
   const my = ++routeSeq;
+  stopCountdown();
   const raw = (location.hash || '#/').slice(1);
   const [path, query] = raw.split('?');
   const qs = new URLSearchParams(query || '');
   const seg = path.split('/').filter(Boolean);
   const head = seg[0] || '';
   if(skipRefresh!==true && LIVE_PAGES.includes(head)){ await refreshData(); if(my!==routeSeq) return; }
+  expireHolds();                                          // ยกเลิกการจองที่หมดเวลาชำระ แล้วคืนห้อง
   renderNav();
   document.getElementById('nav').classList.remove('open');
   if(head==='') viewHome();

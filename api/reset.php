@@ -1,8 +1,4 @@
 <?php
-/*
- * GET  ?token=...                       -> ตรวจว่าลิงก์ยังใช้ได้ไหม { ok: true|false }
- * POST { "token": "...", "password": "..." } -> ตั้งรหัสผ่านใหม่ แล้วทำให้ลิงก์ใช้ไม่ได้อีก
- */
 require __DIR__ . '/config.php';
 
 function out($arr, $code = 200) {

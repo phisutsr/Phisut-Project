@@ -100,6 +100,7 @@ CREATE TABLE Booking (
     guest_note          TEXT,
     created_at          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     public_id           VARCHAR(30)   NOT NULL UNIQUE,    -- เสริม-xampp
+    hold_until          BIGINT        NULL,               -- เวลาหมดอายุการกันห้อง (มิลลิวินาที) หลังกดจอง 30 นาที
     FOREIGN KEY (user_id)          REFERENCES User(member_id),
     FOREIGN KEY (accommodation_id) REFERENCES Accommodation(accommodation_id),
     FOREIGN KEY (room_id)          REFERENCES Room(room_id),

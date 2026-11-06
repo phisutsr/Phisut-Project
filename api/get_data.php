@@ -106,6 +106,7 @@ try {
             'status' => $statusMapOut[$b['booking_status']] ?? strtolower($b['booking_status']),
             'payStatus' => $b['pay_status'], 'slip' => $b['slip_path'], 'payMethod' => $b['pay_method'],
             'createdAt' => substr($b['created_at'], 0, 10), 'note' => $b['guest_note'],
+            'holdUntil' => isset($b['hold_until']) && $b['hold_until'] !== null ? (int) $b['hold_until'] : null,
         ];
     }
 

@@ -95,8 +95,8 @@ try {
         'completed' => 'Completed', 'cancelled' => 'Cancelled',
     ];
     $stBook = $pdo->prepare('INSERT INTO Booking
-        (booking_code, user_id, accommodation_id, room_id, booking_status, check_in_date, check_out_date, room_qty, total_price, accommodation_name, pay_method, pay_status, slip_path, guest_note, created_at, public_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        (booking_code, user_id, accommodation_id, room_id, booking_status, check_in_date, check_out_date, room_qty, total_price, accommodation_name, pay_method, pay_status, slip_path, guest_note, created_at, public_id, hold_until)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     foreach (($data['bookings'] ?? []) as $b) {
         $userInt = $userMap[$b['userId']] ?? null;
         $accInt  = $accMap[$b['propertyId']] ?? null;
@@ -108,6 +108,7 @@ try {
             $b['qty'] ?? 1, $b['total'] ?? 0, $accName[$b['propertyId']] ?? null,
             $b['payMethod'] ?? 'QR code', $b['payStatus'] ?? 'unpaid', $b['slip'] ?? null,
             $b['note'] ?? null, ($b['createdAt'] ?? date('Y-m-d')) . ' 00:00:00', $b['id'],
+            isset($b['holdUntil']) && $b['holdUntil'] ? (int) $b['holdUntil'] : null,
         ]);
         $bookingMap[$b['id']] = (int) $pdo->lastInsertId();
     }
@@ -143,7 +144,7 @@ try {
         SELECT SUM(b.room_qty) FROM Booking b
         WHERE b.room_id = r.room_id
           AND b.booking_status IN ('Pending','Confirmed','CheckedIn')
-          AND b.pay_status IN ('waiting','paid')
+          AND (b.pay_status IN ('waiting','paid') OR (b.pay_status = 'unpaid' AND b.hold_until > UNIX_TIMESTAMP() * 1000))
           AND b.check_out_date > CURDATE()), 0))");
 
     if ($pdo->inTransaction()) $pdo->commit();
